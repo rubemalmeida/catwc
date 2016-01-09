@@ -1,0 +1,120 @@
+#include <Ultrasonic.h>
+
+//Define os pinos do Arduino
+#define PINO_TRG 6 //Trigger HC-SR04
+#define PINO_ECHO 7 //Echo HC-SR04
+#define PINO_FAN 8 //Cooler 12V
+#define PINO_LED_FAN 13 //LED COOLER 12v
+
+//Inicializa o sensor ultrasonico nos pinos especificados
+Ultrasonic ultrasonic(PINO_TRG, PINO_ECHO);
+
+//Variaveis globais
+float DIST_LIMIT = 10; //Distancia limite em cm (sensor dentro da caixa) **** mudar para 35 ****
+float LigarSeg = 5; //Tempo para ligar o vento após sair
+float DesligarMin = 5; //Tempo para desligar o vento depois que sair
+float ultimaDistancia;
+float contUltimoAcessoSegs;
+bool ligado = false;
+bool podeIniciar = false;
+bool podeContar = false;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(PINO_FAN, OUTPUT);
+  pinMode(PINO_LED_FAN, OUTPUT);
+}
+
+void loop() {
+  ControlarVento();
+  CalcularDistancia();
+  delay(1000);
+}
+
+void CalcularDistancia() {
+  //Le os valores do sensor ultrasonico
+  long microsec = ultrasonic.timing();
+  float distAux = ultrasonic.convert(microsec, Ultrasonic::CM);
+
+  //if (distAux != ultimaDistancia)
+  //{
+    ultimaDistancia = distAux;
+    //Mostra os valores na serial
+    Serial.print("Ultimo acesso(s): ");
+    Serial.print(contUltimoAcessoSegs);
+    Serial.print(" - Distancia(cm): ");
+    Serial.println(ultimaDistancia);
+  //}
+}
+
+void ControlarVento(){
+  if (ultimaDistancia <= DIST_LIMIT && DIST_LIMIT > 0.0){
+    if(ligado == true){
+      Serial.println("Ventilacao interrompida por entrada realizada.");
+      digitalWrite(13, LOW);
+      digitalWrite(8, LOW); // Turn off motor
+      ligado = false;
+    }
+    contUltimoAcessoSegs = 0;
+
+    if(podeIniciar == false)
+    {
+      podeIniciar = true;
+    }
+    if(podeContar == false){
+      podeContar = true;
+    }
+  }
+  else{
+    if(podeContar == true){
+      contUltimoAcessoSegs = contUltimoAcessoSegs + 1;
+    }
+    if(podeIniciar == true){
+      if(ligado == false){
+        if(contUltimoAcessoSegs >= LigarSeg){
+          digitalWrite(13, HIGH); // Ligar LED
+          digitalWrite(8, HIGH); // Ligar o motor
+          ligado = true;
+        }
+        else{
+          PiscarLed();
+        }
+      }
+      else {
+        float minAux = contUltimoAcessoSegs / 60;
+        if(minAux >= DesligarMin)
+        {
+          Serial.println("Desligando por tempo de ausencia.");
+          digitalWrite(13, LOW);
+          digitalWrite(8, LOW); // Turn off motor
+          ligado = false; 
+          podeIniciar = false;
+        }
+        else{
+          float segsConvert = DesligarMin * 60;
+          float segsAux = segsConvert - contUltimoAcessoSegs;
+          Serial.print("Desligando em(s): ");
+          if(segsAux > 0){
+            Serial.print(segsAux);
+            Serial.print(" - ");
+          }
+          else {
+            Serial.println("0 - ");
+          }
+        }
+      }
+    }
+  }
+  
+}
+
+void PiscarLed(){
+  if(digitalRead(PINO_LED_FAN) == HIGH)
+  {
+    digitalWrite(PINO_LED_FAN, LOW);
+  }
+  else
+  {
+    digitalWrite(PINO_LED_FAN, HIGH);
+  }
+}
